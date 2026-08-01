@@ -1,18 +1,78 @@
 # speakerdex
 
-**Persistent speaker identity across files.** A local voice registry that sits on top of any diarization pipeline and makes sure the same voice gets the same name — across episodes, recordings and projects.
+**The same voice gets the same name — across every file.**
 
-> Status: **pre-alpha, private**. APIs will change without notice.
+Every diarization tool labels speakers `SPEAKER_00`, `SPEAKER_01`… and forgets
+them when the file ends. Process episode 2 and your host is suddenly
+`SPEAKER_03`. speakerdex is a local voice registry that sits on top of any
+diarizer and resolves per-file speaker clusters to persistent, named identities.
 
-## The problem
+```
+$ speakerdex process-dir episodes/ --enroll-unknowns
+ep01.mp3
+  SPEAKER_00 -> Unknown-1 (new, sim=0.143, 62s)
+  SPEAKER_01 -> Adam Stacoviak (matched, sim=1.000, 65s)
+  SPEAKER_02 -> Unknown-2 (new, sim=0.051, 67s)
+ep02.mp3
+  SPEAKER_00 -> Unknown-1 (matched, sim=0.997, 62s)
+  SPEAKER_01 -> Adam Stacoviak (matched, sim=0.916, 67s)
+  SPEAKER_02 -> Unknown-3 (new, sim=0.221, 64s)
+ep03.mp3
+  SPEAKER_00 -> Adam Stacoviak (matched, sim=0.909, 61s)
+  SPEAKER_01 -> Unknown-4 (new, sim=0.288, 62s)
 
-Every diarization tool (pyannote, WhisperX, NeMo, cloud APIs) labels speakers `SPEAKER_00`, `SPEAKER_01` — and forgets them the moment the file ends. Process episode 2 and the same host is suddenly `SPEAKER_03`. There is no maintained open-source tool that answers: *"is this the same person I heard yesterday?"*
+Files: 3 processed, 0 skipped
+Clusters: 4 matched, 0 review, 4 new
+Identities seen:
+  Adam Stacoviak  ep01.mp3, ep02.mp3, ep03.mp3
+  Unknown-1       ep01.mp3, ep02.mp3
+  Unknown-2       ep01.mp3
+  Unknown-3       ep02.mp3
+  Unknown-4       ep03.mp3
+```
 
-- pyannote's maintainer: cross-file identity works ["not out of the box"](https://github.com/pyannote/pyannote-audio/discussions/1085)
-- AssemblyAI's official answer: [DIY it yourself](https://www.assemblyai.com/docs/faq/do-you-offer-cross-file-speaker-identification) with a third-party model and a vector DB
-- The commercial version of this primitive is [priced per voiceprint](https://www.pyannote.ai/pricing), closed, and cloud-only
+That is real output from the run in [docs/first-real-run.md](docs/first-real-run.md).
+Note `ep03`: the diarizer gave the host `SPEAKER_00` there and `SPEAKER_01` in
+the other two. The label changed; the identity didn't.
 
-speakerdex is the missing piece: **bring your own diarization, keep your audio local, get stable identities.**
+- **Bring your own diarizer** — consumes RTTM or WhisperX JSON; works with
+  pyannote, NeMo, cloud APIs, anything that emits standard output
+- **Local-first** — one SQLite file, no server, no accounts; audio never
+  leaves your machine
+- **Honest about uncertainty** — three confidence bands (matched / review /
+  new) with a built-in review-and-confirm workflow, instead of pretending
+  the model is always right
+- **Calibrate on *your* audio** — `speakerdex calibrate` measures similarity
+  distributions on voices you know and recommends thresholds, rather than
+  hardcoding magic numbers
+
+## Why this doesn't already exist
+
+Cross-file speaker identity is a years-old open ask: pyannote's maintainer
+says it works ["not out of the box"](https://github.com/pyannote/pyannote-audio/discussions/1085),
+and AssemblyAI's official answer is
+["build it yourself"](https://www.assemblyai.com/docs/faq/do-you-offer-cross-file-speaker-identification)
+with a third-party embedding model and a vector database. The commercial
+version of this primitive is [priced per voiceprint](https://www.pyannote.ai/pricing),
+closed, and cloud-only. Everyone who needs it hand-rolls the same clustering
+script. This is that script, done properly, once.
+
+## Measured, not promised
+
+Numbers from the two evaluation runs in `docs/`. These are small corpora —
+treat them as evidence, not benchmarks. Results on other material are the most
+useful contribution you can make.
+
+| | LibriVox (3 readers, 9 files) | Podcast, conversational (5 voices, 3 eps) |
+|---|---|---|
+| Genuine same-voice similarity | 0.73–0.93 | 0.909–0.916 |
+| Worst impostor similarity | 0.25 | 0.288 |
+| Identification | 9/9 leave-one-out | 8/8 clusters, incl. a diarizer label flip |
+| Default thresholds held | yes (calibrate recommended 0.55/0.37) | yes, with wide margin |
+
+Full write-ups: [docs/first-real-run.md](docs/first-real-run.md) and
+[docs/real-world-testing.md](docs/real-world-testing.md). Both record their own
+caveats and failure modes.
 
 ## How it works
 
@@ -33,78 +93,111 @@ speakerdex is the missing piece: **bring your own diarization, keep your audio l
                           matched / review / new  per cluster
 ```
 
-Matches land in one of three bands: **matched** (confident), **review** (probable — confirm with one command), or **new** (auto-enroll as `Unknown-N` if you ask). Embedding backends are pluggable; the registry refuses to mix embeddings from different models.
+Matches land in one of three bands: **matched** (confident), **review**
+(probable — confirm with one command), or **new** (auto-enroll as `Unknown-N`
+if you ask). Embedding backends are pluggable; the registry refuses to mix
+embeddings from different models.
 
 ## Quickstart
 
 ```bash
-pip install "speakerdex[ecapa]"
+pip install "speakerdex[ecapa]"    # the ECAPA extra pulls in torch + speechbrain
+```
 
+The core install has no ML dependencies; the `[ecapa]` extra adds the embedding
+model you need to work with real audio.
+
+```bash
 # 1. Create a registry next to your project
 speakerdex init
+```
 
-# 2. See who is in a diarized file (which SPEAKER_NN is which person?)
+```bash
+# 2. See who is in a diarized file — which SPEAKER_NN is which person?
 speakerdex clusters ep01.json
-#   SPEAKER_02    361.0s  58.4%   85 seg
-#       [11:41]  would be like a hand that the model could use in the…
-#   SPEAKER_01    150.7s  24.4%   37 seg
-#       [04:26]  Maybe you can or cannot speak to just how you personally feel…
-#
-#   Identify people from the previews, not the speaking time: on interviews
-#   the guest routinely outspeaks the host.
+```
 
+```
+ep01.json: 3 clusters, 152 segments, 618.4s labelled speech
+
+SPEAKER_02    361.0s  58.4%   85 seg
+    [11:41]  would be like a hand that the model could use in the…
+    [06:01]  and then anthropic followed up with a bunch of cool stuff after…
+
+SPEAKER_01    150.7s  24.4%   37 seg
+    [04:26]  Maybe you can or cannot speak to just how you personally feel…
+    [04:51]  That's kind of what I want to cover is that bigger landscape…
+
+Pass --audio to also see the likely registry match for each cluster.
+Enroll with:  speakerdex enroll "<name>" <audio> --diarization ep01.json --cluster <LABEL>
+```
+
+Identify people from the **transcript previews**, not the speaking time: on
+interview formats the guest routinely outspeaks the host. (RTTM carries no
+transcript, so previews only appear for WhisperX JSON.)
+
+```bash
 # 3. Enroll a voice — from a solo clip…
 speakerdex enroll "Alex" alex_intro.wav
 
 #    …or straight out of a diarized episode
-speakerdex enroll "Sam" ep01.wav --diarization ep01.rttm --cluster SPEAKER_02
-
-#    Already have identities? Dry-run the match before enrolling anything:
-speakerdex clusters ep02.json --audio ep02.mp3
-#   SPEAKER_01    147.8s  23.8%   36 seg   likely: Alex (sim=0.916, matched)
-#   SPEAKER_02    360.6s  58.0%   96 seg   no match (closest: Alex, sim=0.134)
-
-# 4. Process new files: clusters resolve to stable names
-speakerdex process ep02.wav --diarization ep02.rttm --enroll-unknowns
-#   SPEAKER_00 -> Alex (matched, sim=0.71)
-#   SPEAKER_01 -> Sam (matched, sim=0.64)
-#   SPEAKER_02 -> Unknown-1 (new, sim=0.22)
-
-#    …or do a whole season at once: ep01.wav pairs with ep01.rttm / ep01.json
-speakerdex process-dir season1/ --enroll-unknowns
-#   ep01.wav
-#     SPEAKER_00 -> Alex (matched, sim=0.71)
-#     SPEAKER_01 -> Unknown-1 (new, sim=0.22)
-#   ep02.wav
-#     SPEAKER_00 -> Unknown-1 (matched, sim=0.68)
-#   ep03.wav  [no diarization file]
-#
-#   Files: 2 processed, 1 skipped (1 no diarization file)
-#   Clusters: 2 matched, 0 review, 1 new
-#   Identities seen:
-#     Alex       ep01.wav
-#     Unknown-1  ep01.wav, ep02.wav
-
-# 5. Curate the registry as you learn who people are
-speakerdex ls
-speakerdex rename Unknown-1 "Jordan"
-speakerdex review          # see borderline matches
-speakerdex confirm ep02.wav SPEAKER_01 "Sam"
-
-# 6. Write identity names back into a WhisperX transcript
-speakerdex process ep02.wav -d ep02.json -o ep02_named.json
+speakerdex enroll "Adam Stacoviak" ep01.mp3 --diarization ep01.json --cluster SPEAKER_01
+#   Enrolled 'Adam Stacoviak' from ep01.mp3 (65.2s of speech, 1 voiceprint(s) total)
 ```
 
-Works with any diarizer that emits RTTM, and with WhisperX JSON directly (word-level speakers are relabelled too; the original cluster label is preserved as `speaker_cluster`).
+Once the registry has someone in it, `clusters --audio` dry-runs the match
+before you commit to anything — it writes nothing:
 
-`process-dir` walks files in sorted filename order, which matters with `--enroll-unknowns`: the first file containing a new voice is the one that creates its `Unknown-N` identity, and later files match against it. Files already recorded in the registry are skipped, so re-running as a season grows only costs the new episodes — pass `--force` to reprocess everything.
+```bash
+speakerdex clusters ep02.json --audio ep02.mp3
+```
+
+```
+SPEAKER_02    360.6s  58.0%   96 seg   no match (closest: Adam Stacoviak, sim=0.134)
+SPEAKER_01    147.8s  23.8%   36 seg   likely: Adam Stacoviak (sim=0.916, matched)
+SPEAKER_00    113.1s  18.2%   28 seg   no match (closest: Adam Stacoviak, sim=0.149)
+```
+
+```bash
+# 4. Process files: clusters resolve to stable names
+speakerdex process ep02.mp3 --diarization ep02.json --enroll-unknowns
+
+#    …or a whole season at once: ep01.mp3 pairs with ep01.json / ep01.rttm
+speakerdex process-dir episodes/ --enroll-unknowns
+```
+
+```bash
+# 5. Curate the registry as you learn who people are
+speakerdex ls
+#      1  Adam Stacoviak  (1 voiceprints, seen in 3 file(s))
+#      2  Unknown-1  (1 voiceprints, seen in 2 file(s))
+
+speakerdex rename Unknown-1 "Jordan"
+speakerdex review                                  # borderline matches, if any
+speakerdex confirm ep02.mp3 SPEAKER_01 "Jordan"
+```
+
+```bash
+# 6. Write identity names back into a WhisperX transcript
+speakerdex process ep02.mp3 -d ep02.json -o ep02_named.json
+```
+
+Works with any diarizer that emits RTTM, and with WhisperX JSON directly
+(word-level speakers are relabelled too; the original cluster label is
+preserved as `speaker_cluster`).
+
+`process-dir` walks files in sorted filename order, which matters with
+`--enroll-unknowns`: the first file containing a new voice is the one that
+creates its `Unknown-N` identity, and later files match against it. Files
+already recorded in the registry are skipped, so re-running as a season grows
+only costs the new episodes — pass `--force` to reprocess everything.
 
 ## Library use
 
 ```python
 from speakerdex import Registry, process_file, enroll_from_audio
-from speakerdex.embeddings import get_backend
 from speakerdex.adapters import load_segments
+from speakerdex.embeddings import get_backend
 
 registry = Registry("speakerdex.db")
 backend = get_backend("ecapa")
@@ -112,6 +205,13 @@ backend = get_backend("ecapa")
 enroll_from_audio("Alex", "alex.wav", registry, backend)
 decisions = process_file("ep02.wav", load_segments("ep02.rttm"), registry, backend)
 ```
+
+## What speakerdex is not
+
+It is not a diarizer (it consumes diarization output), not a transcription
+tool, and not a cloud service. It does one thing: persistent speaker identity
+across files. If you need "who said what" within a single file, WhisperX and
+pyannote already do that well.
 
 ## Design decisions
 
@@ -122,9 +222,16 @@ decisions = process_file("ep02.wav", load_segments("ep02.rttm"), registry, backe
 
 ## Threshold guidance
 
-Cosine thresholds are backend- and corpus-dependent. The defaults (`match ≥ 0.55`, `review ≥ 0.40` for ECAPA) are a conservative starting point: studio podcasts can run higher; noisy field recordings lower. Tune with `--match-threshold` / `--review-threshold`. Automatic calibration from confirmed assignments is on the roadmap.
+Cosine thresholds are backend- and corpus-dependent. The defaults
+(`match ≥ 0.55`, `review ≥ 0.40` for ECAPA) are a conservative starting point:
+studio podcasts can run higher; noisy field recordings lower. Tune with
+`--match-threshold` / `--review-threshold`, and measure rather than guess with
+`speakerdex calibrate` — see [docs/real-world-testing.md](docs/real-world-testing.md).
 
-## Roadmap
+## Status & roadmap
+
+**v0.1.0.** It works and it is tested — 60 model-free tests plus two documented
+real-world runs — but it is young, and the APIs may still move.
 
 - [ ] Threshold calibration from confirmed assignments
 - [ ] `speakerdex stats` — registry health (per-identity voiceprint spread, drift)
@@ -136,6 +243,12 @@ Cosine thresholds are backend- and corpus-dependent. The defaults (`match ≥ 0.
 - [ ] Margin reporting — speakerdex knows how close every call came to the thresholds and should say so ("nearest miss: 0.29 below match"); folds into `speakerdex stats` above rather than being its own command
 - [ ] Overlap-aware embedding exclusion (skip segments where diarization reports overlapping speech)
 - [ ] Benchmarks on public multi-episode corpora (e.g. VoxConverse, This American Life dataset)
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md). The single most valuable contribution is
+a `speakerdex calibrate` report from a corpus that isn't in `docs/` yet — that
+is what turns the threshold defaults from two data points into guidance.
 
 ## Development
 

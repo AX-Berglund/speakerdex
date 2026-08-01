@@ -1,0 +1,61 @@
+name: Release
+
+# Fires only on version tags. The tag is pushed by hand, after PyPI Trusted
+# Publishing is configured, so this runs exactly once when PyPI is ready.
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  build:
+    name: Build distributions
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+
+      # The tag is the source of truth for the version; a mismatch with
+      # pyproject would publish something nobody asked for.
+      - name: Check tag matches project version
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          project="$(grep -m1 '^version = ' pyproject.toml | cut -d'"' -f2)"
+          echo "tag=$tag project=$project"
+          test "$tag" = "$project"
+
+      - name: Lint
+        run: uv run ruff check .
+
+      - name: Test
+        run: uv run pytest
+
+      - name: Build sdist and wheel
+        run: uv build
+
+      - name: Check metadata
+        run: uvx twine check --strict dist/*
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+  publish:
+    name: Publish to PyPI
+    needs: build
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write # Trusted Publishing: no API token secrets involved
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+      - uses: pypa/gh-action-pypi-publish@release/v1

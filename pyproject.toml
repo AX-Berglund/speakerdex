@@ -11,12 +11,33 @@ license = "Apache-2.0"
 license-files = ["LICENSE"]
 authors = [{ name = "Axel Berglund", email = "axelberglund98@gmail.com" }]
 requires-python = ">=3.10"
-keywords = ["diarization", "speaker-identification", "speaker-recognition", "whisper", "pyannote", "voiceprint"]
+keywords = [
+  "diarization",
+  "speaker-identification",
+  "speaker-recognition",
+  "speaker-diarization",
+  "voiceprint",
+  "whisper",
+  "whisperx",
+  "pyannote",
+  "rttm",
+  "audio",
+]
 classifiers = [
-  "Development Status :: 2 - Pre-Alpha",
+  "Development Status :: 3 - Alpha",
+  "Environment :: Console",
   "Intended Audience :: Developers",
+  "Intended Audience :: Science/Research",
+  "Operating System :: OS Independent",
   "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
   "Topic :: Multimedia :: Sound/Audio :: Analysis",
+  "Topic :: Multimedia :: Sound/Audio :: Speech",
+  "Topic :: Scientific/Engineering :: Artificial Intelligence",
+  "Typing :: Typed",
 ]
 dependencies = [
   "numpy>=1.24",
@@ -40,7 +61,10 @@ dev = [
 speakerdex = "speakerdex.cli:app"
 
 [project.urls]
-Homepage = "https://github.com/axelberglund/speakerdex"
+Homepage = "https://github.com/AX-Berglund/speakerdex"
+Repository = "https://github.com/AX-Berglund/speakerdex"
+Issues = "https://github.com/AX-Berglund/speakerdex/issues"
+Changelog = "https://github.com/AX-Berglund/speakerdex/blob/main/CHANGELOG.md"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/speakerdex"]
