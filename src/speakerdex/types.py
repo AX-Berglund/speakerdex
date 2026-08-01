@@ -24,6 +24,15 @@ REVIEW = "review"  # between thresholds: probable match, needs human confirmatio
 NEW = "new"  # below review_threshold: treated as a previously unseen speaker
 
 
+NO_SIMILARITY = -1.0
+"""Sentinel: there was nothing to compare this cluster against (empty registry)."""
+
+
+def similarity_json(similarity: float) -> float | None:
+    """Similarity for JSON output; null when there was nothing to compare against."""
+    return None if similarity < 0 else round(similarity, 4)
+
+
 @dataclass
 class MatchDecision:
     """Outcome of matching one per-file speaker cluster against the registry."""
@@ -31,10 +40,11 @@ class MatchDecision:
     cluster: str
     identity_id: int | None
     identity_name: str | None
-    similarity: float
+    similarity: float  # NO_SIMILARITY when the registry held no candidates
     status: str  # MATCHED | REVIEW | NEW
     total_speech: float = 0.0  # seconds of speech the cluster embedding was computed from
 
     def __str__(self) -> str:
         name = self.identity_name or "?"
-        return f"{self.cluster} -> {name} ({self.status}, sim={self.similarity:.3f})"
+        sim = "n/a" if self.similarity < 0 else f"{self.similarity:.3f}"
+        return f"{self.cluster} -> {name} ({self.status}, sim={sim})"

@@ -13,6 +13,7 @@ from .adapters import load_segments, write_whisperx
 from .matcher import MatchConfig
 from .pipeline import ProcessConfig, enroll_from_audio, process_file
 from .registry import Registry
+from .types import similarity_json
 
 app = typer.Typer(
     name="speakerdex",
@@ -112,7 +113,7 @@ def process(
                     {
                         "cluster": d.cluster,
                         "identity": d.identity_name,
-                        "similarity": round(d.similarity, 4),
+                        "similarity": similarity_json(d.similarity),
                         "status": d.status,
                         "speech_seconds": round(d.total_speech, 1),
                     }

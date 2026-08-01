@@ -43,7 +43,7 @@ from .calibrate import AUDIO_EXTS  # one source of truth for "what counts as aud
 from .embeddings import EmbeddingBackend
 from .pipeline import ProcessConfig, process_file
 from .registry import Assignment, Registry
-from .types import MATCHED, NEW, REVIEW, MatchDecision
+from .types import MATCHED, NEW, REVIEW, MatchDecision, similarity_json
 
 # Checked in order, so .rttm wins when a file has both partners.
 DIARIZATION_EXTS = (".rttm", ".json")
@@ -198,7 +198,7 @@ class BatchReport:
                         {
                             "cluster": d.cluster,
                             "identity": d.identity_name,
-                            "similarity": round(d.similarity, 4),
+                            "similarity": similarity_json(d.similarity),
                             "status": d.status,
                             # not stored on assignments, so unknown when replayed
                             "speech_seconds": None if r.from_registry else round(d.total_speech, 1),

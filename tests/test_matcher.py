@@ -1,7 +1,8 @@
 import numpy as np
+import pytest
 
 from speakerdex.matcher import MatchConfig, match_clusters
-from speakerdex.types import MATCHED, NEW, REVIEW
+from speakerdex.types import MATCHED, NEW, NO_SIMILARITY, REVIEW, similarity_json
 
 
 def one_hot(i: int, dim: int = 8) -> np.ndarray:
@@ -57,11 +58,51 @@ def test_one_to_one_within_file():
     assert decisions["SPEAKER_01"].status == NEW
 
 
+def test_new_decision_reports_closest_identity_for_context():
+    """A NEW cluster still names its nearest identity, so `review` has context."""
+    centroids = {1: one_hot(0), 2: one_hot(1)}
+    # closer to Bob than Alice, but below the review threshold for both
+    clusters = {"SPEAKER_00": (blend(1, 5, 0.30), 8.0)}
+    d = match_clusters(clusters, centroids, NAMES)[0]
+    assert d.status == NEW
+    assert d.identity_id is None  # not an assignment, just context
+    assert d.identity_name == "Bob"
+    assert d.similarity == pytest.approx(0.30)
+
+
+def test_loser_of_one_to_one_reports_the_identity_it_lost():
+    """The cluster beaten to an identity still reports it as its closest."""
+    centroids = {1: one_hot(0)}
+    clusters = {
+        "SPEAKER_00": (blend(0, 1, 0.95), 30.0),
+        "SPEAKER_01": (blend(0, 1, 0.80), 30.0),
+    }
+    decisions = {d.cluster: d for d in match_clusters(clusters, centroids, NAMES)}
+    loser = decisions["SPEAKER_01"]
+    assert loser.status == NEW
+    assert loser.identity_id is None
+    assert loser.identity_name == "Alice"
+    assert loser.similarity == pytest.approx(0.80)  # its raw score, not the winner's
+
+
 def test_empty_registry_everything_is_new():
     clusters = {"SPEAKER_00": (one_hot(0), 5.0)}
     d = match_clusters(clusters, {}, {})[0]
     assert d.status == NEW
     assert d.identity_id is None
+    assert d.identity_name is None
+    assert d.similarity == NO_SIMILARITY  # nothing to compare against
+
+
+def test_no_similarity_renders_as_na_not_minus_one():
+    d = match_clusters({"SPEAKER_00": (one_hot(0), 5.0)}, {}, {})[0]
+    assert "sim=n/a" in str(d)
+    assert "-1.000" not in str(d)
+    assert similarity_json(d.similarity) is None
+    # a real score is still a number
+    real = match_clusters({"SPEAKER_00": (one_hot(0), 5.0)}, {1: one_hot(0)}, NAMES)[0]
+    assert "sim=1.000" in str(real)
+    assert similarity_json(real.similarity) == 1.0
 
 
 def test_custom_thresholds():

@@ -12,7 +12,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from .types import MATCHED, NEW, REVIEW, MatchDecision
+from .types import MATCHED, NEW, NO_SIMILARITY, REVIEW, MatchDecision
 
 
 @dataclass
@@ -50,16 +50,13 @@ def match_clusters(
             pairs.append((cosine(emb, centroid), cluster, identity_id))
     pairs.sort(key=lambda p: p[0], reverse=True)
 
-    best_sim: dict[str, float] = {c: -1.0 for c in cluster_embeddings}
+    best_sim: dict[str, float] = {c: NO_SIMILARITY for c in cluster_embeddings}
     best_id: dict[str, int | None] = {c: None for c in cluster_embeddings}
     taken: set[int] = set()
     assigned: set[str] = set()
 
     for sim, cluster, identity_id in pairs:
         if cluster in assigned or identity_id in taken:
-            # still track the best raw similarity for reporting
-            if sim > best_sim[cluster] and cluster not in assigned:
-                pass
             continue
         if sim < config.review_threshold:
             break  # sorted desc: nothing below this point can match
@@ -82,7 +79,7 @@ def match_clusters(
                     cluster=cluster,
                     identity_id=None,
                     identity_name=names.get(closest[2]) if closest else None,
-                    similarity=closest[0] if closest else -1.0,
+                    similarity=closest[0] if closest else NO_SIMILARITY,
                     status=NEW,
                     total_speech=dur,
                 )

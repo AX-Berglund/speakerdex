@@ -282,6 +282,29 @@ def test_cli_process_dir_text_and_json(season, tmp_path):
     assert data["files"][0]["decisions"][0]["speech_seconds"] == SPEECH_SEC
 
 
+def test_empty_registry_similarity_reads_na_and_serializes_null(tmp_path):
+    """The first file against a fresh registry has nothing to compare against."""
+    d = tmp_path / "fresh"
+    write_episode(d, "ep01", [(ALICE, "SPEAKER_00")])
+    def args(db):  # each invocation needs a fresh registry to still be empty
+        return [
+            "process-dir", str(d),
+            "--backend", "fake-spectral",
+            "--db", str(tmp_path / db),
+            "--enroll-unknowns",
+            *FAKE_THRESHOLDS,
+        ]
+
+    result = runner.invoke(app, args("text.db"))
+    assert result.exit_code == 0, result.output
+    assert "sim=n/a" in result.output
+    assert "-1.000" not in result.output
+
+    result = runner.invoke(app, [*args("json.db"), "--json"])
+    assert result.exit_code == 0, result.output
+    assert json.loads(result.output)["files"][0]["decisions"][0]["similarity"] is None
+
+
 def test_cli_reports_empty_directory(tmp_path):
     d = tmp_path / "empty"
     d.mkdir()

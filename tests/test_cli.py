@@ -67,3 +67,21 @@ def test_full_cli_flow(tmp_path, write_wav):
     assert result.exit_code == 0
     assert "Alice" in result.output
     assert "Bob" in result.output
+
+
+def test_process_against_empty_registry_reports_na_not_minus_one(tmp_path, write_wav):
+    """Nothing enrolled yet: there is no similarity to report, in text or JSON."""
+    db = str(tmp_path / "reg.db")
+    ep_wav = write_wav("ep1.wav", build_track([(220.0, 4.0)]))
+    rttm = tmp_path / "ep1.rttm"
+    write_rttm([Segment(0.0, 4.0, "SPEAKER_00")], rttm, file_id="ep1")
+    args = ["process", str(ep_wav), "-d", str(rttm), "--backend", "fake-spectral", "--db", db]
+
+    result = runner.invoke(app, args)
+    assert result.exit_code == 0, result.output
+    assert "sim=n/a" in result.output
+    assert "-1.000" not in result.output
+
+    result = runner.invoke(app, [*args, "--json"])
+    assert result.exit_code == 0, result.output
+    assert json.loads(result.output)[0]["similarity"] is None
