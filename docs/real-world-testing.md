@@ -121,6 +121,11 @@ speakerdex process ep02.mp3 -d ep02.json -o ep02_named.json   # named transcript
 
 ## Step 3 — Record what you find
 
+The first run of this guide is written up in
+[first-real-run.md](first-real-run.md) — a single-hosted podcast across three
+episodes, where the defaults held with a 0.62 separation gap. Use it as a
+template for the shape of a useful report.
+
 Open an issue (or note in the README) with: number of speakers, audio conditions, the calibrate output block, and whether the defaults (0.55/0.40) were close. After a few corpora this becomes the documented per-domain threshold guidance — and the input to the roadmap's automatic calibration.
 
 ## Known limitations to watch for

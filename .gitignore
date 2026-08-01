@@ -19,6 +19,9 @@ uv.lock
 *.mp3
 *.flac
 
+# real-run material: audio and the diarization JSON derived from it
+episodes/
+
 # OS/editor
 .DS_Store
 .idea/
