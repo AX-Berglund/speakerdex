@@ -1,0 +1,61 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "speakerdex"
+version = "0.1.0"
+description = "Persistent speaker identity across files: a local voice registry for diarization pipelines."
+readme = "README.md"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+authors = [{ name = "Axel Berglund", email = "axelberglund98@gmail.com" }]
+requires-python = ">=3.10"
+keywords = ["diarization", "speaker-identification", "speaker-recognition", "whisper", "pyannote", "voiceprint"]
+classifiers = [
+  "Development Status :: 2 - Pre-Alpha",
+  "Intended Audience :: Developers",
+  "Programming Language :: Python :: 3",
+  "Topic :: Multimedia :: Sound/Audio :: Analysis",
+]
+dependencies = [
+  "numpy>=1.24",
+  "typer>=0.12",
+  "soundfile>=0.12",
+  "soxr>=0.3",
+]
+
+[project.optional-dependencies]
+ecapa = [
+  "torch>=2.1",
+  "torchaudio>=2.1",
+  "speechbrain>=1.0",
+]
+dev = [
+  "pytest>=8.0",
+  "ruff>=0.4",
+]
+
+[project.scripts]
+speakerdex = "speakerdex.cli:app"
+
+[project.urls]
+Homepage = "https://github.com/axelberglund/speakerdex"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/speakerdex"]
+
+[tool.ruff]
+line-length = 100
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.ruff.lint.per-file-ignores]
+# B008: `typer.Option(...)` in defaults is the standard typer idiom
+"src/speakerdex/cli.py" = ["B008"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
