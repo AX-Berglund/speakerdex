@@ -82,6 +82,33 @@ def test_enroll_from_diarized_cluster(registry, backend, write_wav):
     assert decisions["SPEAKER_00"].status == NEW
 
 
+def test_bad_cluster_error_lists_the_real_clusters(registry, backend, write_wav):
+    """The error must be enough to fix the command; no second lookup needed."""
+    wav = write_wav("ep.wav", build_track([(ALICE, 5.0), (BOB, 3.0)]))
+    segments = [Segment(0.0, 5.0, "SPEAKER_00"), Segment(5.0, 8.0, "SPEAKER_01")]
+
+    with pytest.raises(ValueError) as excinfo:
+        enroll_from_audio("Bob", wav, registry, backend, segments=segments, cluster="SPEAKER_99")
+
+    message = str(excinfo.value)
+    assert "SPEAKER_99" in message
+    assert "2 cluster(s)" in message
+    assert "SPEAKER_00  5.0s" in message  # longest first, with seconds
+    assert "SPEAKER_01  3.0s" in message
+
+
+def test_enroll_reports_seconds_captured(registry, backend, write_wav):
+    wav = write_wav("alice.wav", build_track([(ALICE, 6.0)]))
+    result = enroll_from_audio("Alice", wav, registry, backend)
+    assert result.seconds == pytest.approx(6.0, abs=0.1)
+    assert result.chunks == 1
+    assert result.is_thin  # 6s is under the 10s floor
+    assert registry.identity_by_name("Alice").id == result.identity_id
+
+    longer = write_wav("alice2.wav", build_track([(ALICE, 20.0)]))
+    assert not enroll_from_audio("Alice", longer, registry, backend).is_thin
+
+
 def test_reinforce_adds_voiceprints(registry, backend, write_wav):
     enroll_wav = write_wav("alice.wav", build_track([(ALICE, 5.0)]))
     enroll_from_audio("Alice", enroll_wav, registry, backend)

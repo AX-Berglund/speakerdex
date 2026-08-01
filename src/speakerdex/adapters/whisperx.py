@@ -20,7 +20,14 @@ def load_whisperx(path: str | Path) -> list[Segment]:
         speaker = seg.get("speaker")
         if speaker is None:
             continue
-        segments.append(Segment(start=float(seg["start"]), end=float(seg["end"]), speaker=speaker))
+        segments.append(
+            Segment(
+                start=float(seg["start"]),
+                end=float(seg["end"]),
+                speaker=speaker,
+                text=(seg.get("text") or "").strip(),
+            )
+        )
     return segments
 
 

@@ -69,12 +69,56 @@ with open("ep01.rttm", "w") as f:
     pipeline("ep01.wav").write_rttm(f)
 ```
 
+### Which cluster is who?
+
+Diarizers emit `SPEAKER_00`, `SPEAKER_01` — nothing about the label tells you
+who it is. Ask:
+
+```bash
+speakerdex clusters ep01.json
+```
+
+```
+ep01.json: 3 clusters, 152 segments, 618.4s labelled speech
+
+SPEAKER_02    361.0s  58.4%   85 seg
+    [11:41]  would be like a hand that the model could use in the…
+    [06:01]  and then anthropic followed up with a bunch of cool stuff after…
+
+SPEAKER_01    150.7s  24.4%   37 seg
+    [04:26]  Maybe you can or cannot speak to just how you personally feel…
+    [06:44]  What made you feel like sharing was the best way.
+```
+
+Identify people **from the transcript previews**, not from the speaking time.
+It is tempting to assume the longest-speaking cluster is the host, and on
+interview formats that is reliably wrong: in the run recorded in
+[first-real-run.md](first-real-run.md), the guest spoke 58% and the host 24%,
+so the time-based guess picks the wrong person every time. The previews make it
+obvious — the interviewer asks questions, the guest explains things.
+
+RTTM carries no transcript, so previews only appear for WhisperX JSON. With
+RTTM you get the timings, and can listen at those offsets.
+
+Once the registry has someone in it, add `--audio` to dry-run the match before
+committing to anything:
+
+```bash
+speakerdex clusters ep02.json --audio ep02.mp3
+#   SPEAKER_01    147.8s  23.8%   36 seg   likely: Alex (sim=0.916, matched)
+#   SPEAKER_02    360.6s  58.0%   96 seg   no match (closest: Alex, sim=0.134)
+```
+
+That writes nothing — no identities, no voiceprints, no assignments.
+
+### The loop
+
 Then the speakerdex loop, using your calibrated thresholds:
 
 ```bash
 speakerdex init
-speakerdex enroll "Alex" voices/alex/ep01.wav
-speakerdex enroll "Sam"  voices/sam/ep01.wav
+speakerdex enroll "Alex" ep01.mp3 -d ep01.json --cluster SPEAKER_01
+speakerdex enroll "Sam"  ep01.mp3 -d ep01.json --cluster SPEAKER_02
 
 speakerdex process ep01.mp3 -d ep01.json --enroll-unknowns \
     --match-threshold 0.58 --review-threshold 0.42

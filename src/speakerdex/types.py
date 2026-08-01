@@ -12,10 +12,19 @@ class Segment:
     start: float
     end: float
     speaker: str  # per-file cluster label from the diarizer, e.g. "SPEAKER_00"
+    text: str = ""  # transcript, when the source format carries one (WhisperX)
 
     @property
     def duration(self) -> float:
         return self.end - self.start
+
+
+def cluster_seconds(segments: list[Segment]) -> list[tuple[str, float]]:
+    """(cluster label, total speech seconds) for each cluster, longest first."""
+    totals: dict[str, float] = {}
+    for seg in segments:
+        totals[seg.speaker] = totals.get(seg.speaker, 0.0) + seg.duration
+    return sorted(totals.items(), key=lambda kv: kv[1], reverse=True)
 
 
 # Assignment status values
@@ -47,4 +56,7 @@ class MatchDecision:
     def __str__(self) -> str:
         name = self.identity_name or "?"
         sim = "n/a" if self.similarity < 0 else f"{self.similarity:.3f}"
-        return f"{self.cluster} -> {name} ({self.status}, sim={sim})"
+        # How much speech backed the decision is central to trusting it. Omitted
+        # when unknown, e.g. replayed from a stored assignment.
+        speech = f", {self.total_speech:.0f}s" if self.total_speech > 0 else ""
+        return f"{self.cluster} -> {name} ({self.status}, sim={sim}{speech})"

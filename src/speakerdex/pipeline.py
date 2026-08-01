@@ -15,7 +15,23 @@ from .audio import MAX_TOTAL_SEC, MIN_SEGMENT_SEC, load_audio, select_chunks
 from .embeddings import EmbeddingBackend, combine
 from .matcher import MatchConfig, match_clusters
 from .registry import Registry
-from .types import NEW, MatchDecision, Segment
+from .types import NEW, MatchDecision, Segment, cluster_seconds
+
+THIN_ENROLLMENT_SEC = 10.0
+"""Below this much speech, a voiceprint is too noisy to trust as an anchor."""
+
+
+@dataclass
+class EnrollResult:
+    """What an enrollment actually captured — the seconds matter, so report them."""
+
+    identity_id: int
+    seconds: float
+    chunks: int
+
+    @property
+    def is_thin(self) -> bool:
+        return self.seconds < THIN_ENROLLMENT_SEC
 
 
 @dataclass
@@ -112,12 +128,16 @@ def enroll_from_audio(
     segments: list[Segment] | None = None,
     cluster: str | None = None,
     config: ProcessConfig | None = None,
-) -> int:
+) -> EnrollResult:
     """Enroll an identity from audio.
 
     With no segments: the whole file is assumed to be one speaker talking.
     With segments + cluster: only that cluster's speech is used (enroll
     someone directly out of a diarized episode).
+
+    Returns what was captured, including the seconds of speech behind the
+    voiceprint — a thin enrollment quietly poisons every later match, so
+    callers should surface it rather than discard it.
     """
     config = config or ProcessConfig()
     registry.check_backend(backend.name)
@@ -128,7 +148,14 @@ def enroll_from_audio(
             raise ValueError("when segments are given, a cluster label is required")
         segs = [s for s in segments if s.speaker == cluster]
         if not segs:
-            raise ValueError(f"no segments with cluster label {cluster!r}")
+            # List what IS there: the user must be able to fix this from the
+            # error alone, without going off to run another command.
+            available = cluster_seconds(segments)
+            listing = "\n".join(f"  {label}  {secs:.1f}s" for label, secs in available)
+            raise ValueError(
+                f"no segments with cluster label {cluster!r}. "
+                f"This diarization has {len(available)} cluster(s):\n{listing}"
+            )
     else:
         segs = [Segment(start=0.0, end=len(wave) / sr, speaker="ENROLL")]
 
@@ -143,5 +170,6 @@ def enroll_from_audio(
 
     ident = registry.identity_by_name(name)
     identity_id = ident.id if ident else registry.enroll(name)
-    registry.add_voiceprint(identity_id, emb, duration=sum(durations), source=str(audio_path))
-    return identity_id
+    seconds = sum(durations)
+    registry.add_voiceprint(identity_id, emb, duration=seconds, source=str(audio_path))
+    return EnrollResult(identity_id=identity_id, seconds=seconds, chunks=len(chunks))

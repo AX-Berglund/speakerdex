@@ -148,6 +148,14 @@ class Registry:
         ).fetchall()
         return [Identity(*row) for row in rows]
 
+    def file_counts(self) -> dict[int, int]:
+        """identity id -> how many distinct source files it has been assigned in."""
+        rows = self.conn.execute(
+            "SELECT identity_id, COUNT(DISTINCT source) FROM assignments "
+            "WHERE identity_id IS NOT NULL GROUP BY identity_id"
+        ).fetchall()
+        return dict(rows)
+
     def rename(self, old: str, new: str) -> None:
         cur = self.conn.execute("UPDATE identities SET name = ? WHERE name = ?", (new, old))
         if cur.rowcount == 0:

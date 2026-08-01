@@ -11,7 +11,7 @@ import typer
 from . import __version__
 from .adapters import load_segments, write_whisperx
 from .matcher import MatchConfig
-from .pipeline import ProcessConfig, enroll_from_audio, process_file
+from .pipeline import THIN_ENROLLMENT_SEC, ProcessConfig, enroll_from_audio, process_file
 from .registry import Registry
 from .types import similarity_json
 
@@ -69,9 +69,63 @@ def enroll(
     """Enroll a voice. Without --diarization, the whole file is assumed to be one speaker."""
     segments = load_segments(diarization, fmt) if diarization else None
     with Registry(db) as registry:
-        enroll_from_audio(name, audio, registry, _backend(backend), segments, cluster)
+        try:
+            result = enroll_from_audio(name, audio, registry, _backend(backend), segments, cluster)
+        except ValueError as e:
+            # Bad cluster labels are a user error, not a crash: the message
+            # carries the recovery information, so show it plainly.
+            typer.echo(f"Error: {e}", err=True)
+            raise typer.Exit(1) from None
         count = next(i.voiceprint_count for i in registry.identities() if i.name == name)
-    typer.echo(f"Enrolled {name!r} from {audio.name} ({count} voiceprint(s) total)")
+    typer.echo(
+        f"Enrolled {name!r} from {audio.name} "
+        f"({result.seconds:.1f}s of speech, {count} voiceprint(s) total)"
+    )
+    if result.is_thin:
+        typer.echo(
+            f"Warning: only {result.seconds:.1f}s of speech. Voiceprints under "
+            f"{THIN_ENROLLMENT_SEC:.0f}s are unreliable and will weaken every later "
+            "match against this identity; prefer a longer clip.",
+            err=True,
+        )
+
+
+@app.command()
+def clusters(
+    diarization: Path = typer.Argument(
+        ..., exists=True, help="Diarization file (RTTM or WhisperX JSON)."
+    ),
+    audio: Path | None = typer.Option(
+        None, "--audio", exists=True,
+        help="Audio file: also dry-run the match, showing each cluster's likely identity.",
+    ),
+    fmt: str | None = typer.Option(None, "--format", help="Diarization format: rttm | whisperx."),
+    backend: str = typer.Option("ecapa", "--backend", help="Embedding backend."),
+    match_threshold: float = typer.Option(0.55, help="Cosine similarity for a confident match."),
+    review_threshold: float = typer.Option(0.40, help="Below this: treated as a new speaker."),
+    json_out: bool = typer.Option(False, "--json", help="Print the report as JSON."),
+    db: str = _db_option,
+) -> None:
+    """Show who is in a diarization file, so you know which --cluster to enroll.
+
+    Lists every cluster with its speaking time and, for WhisperX JSON, a
+    transcript preview. With --audio, also dry-runs the match against the
+    registry without writing anything.
+    """
+    from .clusters import inspect_clusters
+
+    config = MatchConfig(match_threshold=match_threshold, review_threshold=review_threshold)
+    with Registry(db) as registry:
+        # Only pay to load an embedding model if there is something to match against.
+        use_backend = _backend(backend) if audio and registry.centroids() else None
+        report = inspect_clusters(
+            diarization, fmt,
+            audio=audio,
+            registry=registry if audio else None,
+            backend=use_backend,
+            match=config,
+        )
+    typer.echo(json.dumps(report.to_dict(), indent=2) if json_out else report.summary())
 
 
 @app.command()
@@ -208,11 +262,16 @@ def list_identities(db: str = _db_option) -> None:
     """List enrolled identities."""
     with Registry(db) as registry:
         identities = registry.identities()
+        files = registry.file_counts()
     if not identities:
         typer.echo("No identities enrolled yet. Try: speakerdex enroll <name> <audio>")
         raise typer.Exit()
     for ident in identities:
-        typer.echo(f"{ident.id:4d}  {ident.name}  ({ident.voiceprint_count} voiceprints)")
+        seen = files.get(ident.id, 0)
+        typer.echo(
+            f"{ident.id:4d}  {ident.name}  "
+            f"({ident.voiceprint_count} voiceprints, seen in {seen} file(s))"
+        )
 
 
 @app.command()

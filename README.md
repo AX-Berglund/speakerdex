@@ -43,13 +43,28 @@ pip install "speakerdex[ecapa]"
 # 1. Create a registry next to your project
 speakerdex init
 
-# 2. Enroll a voice — from a solo clip…
+# 2. See who is in a diarized file (which SPEAKER_NN is which person?)
+speakerdex clusters ep01.json
+#   SPEAKER_02    361.0s  58.4%   85 seg
+#       [11:41]  would be like a hand that the model could use in the…
+#   SPEAKER_01    150.7s  24.4%   37 seg
+#       [04:26]  Maybe you can or cannot speak to just how you personally feel…
+#
+#   Identify people from the previews, not the speaking time: on interviews
+#   the guest routinely outspeaks the host.
+
+# 3. Enroll a voice — from a solo clip…
 speakerdex enroll "Alex" alex_intro.wav
 
 #    …or straight out of a diarized episode
 speakerdex enroll "Sam" ep01.wav --diarization ep01.rttm --cluster SPEAKER_02
 
-# 3. Process new files: clusters resolve to stable names
+#    Already have identities? Dry-run the match before enrolling anything:
+speakerdex clusters ep02.json --audio ep02.mp3
+#   SPEAKER_01    147.8s  23.8%   36 seg   likely: Alex (sim=0.916, matched)
+#   SPEAKER_02    360.6s  58.0%   96 seg   no match (closest: Alex, sim=0.134)
+
+# 4. Process new files: clusters resolve to stable names
 speakerdex process ep02.wav --diarization ep02.rttm --enroll-unknowns
 #   SPEAKER_00 -> Alex (matched, sim=0.71)
 #   SPEAKER_01 -> Sam (matched, sim=0.64)
@@ -70,13 +85,13 @@ speakerdex process-dir season1/ --enroll-unknowns
 #     Alex       ep01.wav
 #     Unknown-1  ep01.wav, ep02.wav
 
-# 4. Curate the registry as you learn who people are
+# 5. Curate the registry as you learn who people are
 speakerdex ls
 speakerdex rename Unknown-1 "Jordan"
 speakerdex review          # see borderline matches
 speakerdex confirm ep02.wav SPEAKER_01 "Sam"
 
-# 5. Write identity names back into a WhisperX transcript
+# 6. Write identity names back into a WhisperX transcript
 speakerdex process ep02.wav -d ep02.json -o ep02_named.json
 ```
 
@@ -116,6 +131,9 @@ Cosine thresholds are backend- and corpus-dependent. The defaults (`match ≥ 0.
 - [ ] Additional backends (wespeaker, pyannote/embedding) behind extras
 - [x] Batch mode: `speakerdex process-dir` over a season of episodes
 - [ ] Export/import registries (share a cast registry for a show)
+- [ ] Representative sample per identity — store one `(source, start, end)` with each voiceprint so `ls` can show what `Unknown-3` actually sounds like instead of sending you back to the transcript; needs a schema migration, so deferred rather than bolted on
+- [ ] Time-range exclusion (e.g. `--skip 0:00-2:10`) — baked-in sponsor reads are recurring voices and become permanent identities; whether the rule belongs per-file, per-run or stored in the registry is an open design question
+- [ ] Margin reporting — speakerdex knows how close every call came to the thresholds and should say so ("nearest miss: 0.29 below match"); folds into `speakerdex stats` above rather than being its own command
 - [ ] Overlap-aware embedding exclusion (skip segments where diarization reports overlapping speech)
 - [ ] Benchmarks on public multi-episode corpora (e.g. VoxConverse, This American Life dataset)
 
