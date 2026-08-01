@@ -66,6 +66,18 @@ class Identity:
     voiceprint_count: int = 0
 
 
+@dataclass
+class Assignment:
+    """A recorded (source file, cluster) -> identity resolution."""
+
+    source: str
+    cluster: str
+    identity_id: int | None
+    identity_name: str | None
+    similarity: float
+    status: str
+
+
 class Registry:
     def __init__(self, path: str | Path):
         self.path = Path(path)
@@ -197,6 +209,16 @@ class Registry:
             (source, cluster, identity_id, similarity, status, _now()),
         )
         self.conn.commit()
+
+    def assignments_for(self, source: str) -> list[Assignment]:
+        """Every assignment already recorded for one source file (empty if unprocessed)."""
+        rows = self.conn.execute(
+            "SELECT a.source, a.cluster, a.identity_id, i.name, a.similarity, a.status "
+            "FROM assignments a LEFT JOIN identities i ON i.id = a.identity_id "
+            "WHERE a.source = ? ORDER BY a.cluster",
+            (source,),
+        ).fetchall()
+        return [Assignment(*row) for row in rows]
 
     def pending_reviews(self) -> list[tuple[str, str, str | None, float]]:
         """(source, cluster, identity_name, similarity) for review-band assignments."""

@@ -131,6 +131,44 @@ def process(
         typer.echo(f"Relabelled transcript written to {output}")
 
 
+@app.command("process-dir")
+def process_dir(
+    directory: Path = typer.Argument(
+        ..., exists=True, file_okay=False, help="Folder of audio + diarization files."
+    ),
+    backend: str = typer.Option("ecapa", "--backend", help="Embedding backend."),
+    match_threshold: float = typer.Option(0.55, help="Cosine similarity for a confident match."),
+    review_threshold: float = typer.Option(0.40, help="Below this: treated as a new speaker."),
+    enroll_unknowns: bool = typer.Option(
+        False, "--enroll-unknowns", help="Auto-enroll unmatched clusters as Unknown-N."
+    ),
+    reinforce: bool = typer.Option(
+        False, "--reinforce", help="Add high-confidence matches as fresh voiceprints."
+    ),
+    force: bool = typer.Option(
+        False, "--force", help="Reprocess files that already have assignments."
+    ),
+    json_out: bool = typer.Option(False, "--json", help="Print the whole run as one JSON object."),
+    db: str = _db_option,
+) -> None:
+    """Process a folder of files in sorted order: ep01.wav pairs with ep01.rttm/.json.
+
+    Already-processed files are skipped unless --force; audio with no
+    diarization partner is reported as skipped, not an error.
+    """
+    from .batch import process_dir as run_batch
+
+    config = ProcessConfig(
+        match=MatchConfig(match_threshold=match_threshold, review_threshold=review_threshold),
+        enroll_unknowns=enroll_unknowns,
+        reinforce=reinforce,
+    )
+    with Registry(db) as registry:
+        report = run_batch(directory, registry, _backend(backend), config, force=force)
+
+    typer.echo(json.dumps(report.to_dict(), indent=2) if json_out else report.summary())
+
+
 @app.command()
 def calibrate(
     voices_dir: Path = typer.Argument(

@@ -55,6 +55,21 @@ speakerdex process ep02.wav --diarization ep02.rttm --enroll-unknowns
 #   SPEAKER_01 -> Sam (matched, sim=0.64)
 #   SPEAKER_02 -> Unknown-1 (new, sim=0.22)
 
+#    …or do a whole season at once: ep01.wav pairs with ep01.rttm / ep01.json
+speakerdex process-dir season1/ --enroll-unknowns
+#   ep01.wav
+#     SPEAKER_00 -> Alex (matched, sim=0.71)
+#     SPEAKER_01 -> Unknown-1 (new, sim=0.22)
+#   ep02.wav
+#     SPEAKER_00 -> Unknown-1 (matched, sim=0.68)
+#   ep03.wav  [no diarization file]
+#
+#   Files: 2 processed, 1 skipped (1 no diarization file)
+#   Clusters: 2 matched, 0 review, 1 new
+#   Identities seen:
+#     Alex       ep01.wav
+#     Unknown-1  ep01.wav, ep02.wav
+
 # 4. Curate the registry as you learn who people are
 speakerdex ls
 speakerdex rename Unknown-1 "Jordan"
@@ -66,6 +81,8 @@ speakerdex process ep02.wav -d ep02.json -o ep02_named.json
 ```
 
 Works with any diarizer that emits RTTM, and with WhisperX JSON directly (word-level speakers are relabelled too; the original cluster label is preserved as `speaker_cluster`).
+
+`process-dir` walks files in sorted filename order, which matters with `--enroll-unknowns`: the first file containing a new voice is the one that creates its `Unknown-N` identity, and later files match against it. Files already recorded in the registry are skipped, so re-running as a season grows only costs the new episodes — pass `--force` to reprocess everything.
 
 ## Library use
 
@@ -97,7 +114,7 @@ Cosine thresholds are backend- and corpus-dependent. The defaults (`match ≥ 0.
 - [ ] Threshold calibration from confirmed assignments
 - [ ] `speakerdex stats` — registry health (per-identity voiceprint spread, drift)
 - [ ] Additional backends (wespeaker, pyannote/embedding) behind extras
-- [ ] Batch mode: `speakerdex process-dir` over a season of episodes
+- [x] Batch mode: `speakerdex process-dir` over a season of episodes
 - [ ] Export/import registries (share a cast registry for a show)
 - [ ] Overlap-aware embedding exclusion (skip segments where diarization reports overlapping speech)
 - [ ] Benchmarks on public multi-episode corpora (e.g. VoxConverse, This American Life dataset)

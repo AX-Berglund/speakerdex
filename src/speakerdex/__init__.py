@@ -7,6 +7,7 @@ projects.
 
 __version__ = "0.1.0"
 
+from .batch import process_dir
 from .matcher import MatchConfig
 from .pipeline import ProcessConfig, enroll_from_audio, process_file
 from .registry import Registry
@@ -18,6 +19,7 @@ __all__ = [
     "Registry",
     "Segment",
     "enroll_from_audio",
+    "process_dir",
     "process_file",
     "__version__",
 ]

@@ -83,6 +83,33 @@ speakerdex process ep02.mp3 -d ep02.json --enroll-unknowns \
     --match-threshold 0.58 --review-threshold 0.42
 ```
 
+If both episodes and their diarization files sit in one folder with matching
+stems (`ep01.mp3` + `ep01.json`, `ep02.mp3` + `ep02.json`), the two `process`
+calls above collapse into one:
+
+```bash
+speakerdex process-dir episodes/ --enroll-unknowns \
+    --match-threshold 0.58 --review-threshold 0.42
+```
+
+Same result, plus a roster at the end showing which identity turned up in which
+episode — which is the answer to the question this step asks, without diffing
+two blocks of output by eye:
+
+```
+Files: 2 processed, 0 skipped
+Clusters: 3 matched, 0 review, 1 new
+Identities seen:
+  Alex       ep01.mp3, ep02.mp3
+  Sam        ep01.mp3, ep02.mp3
+  Unknown-1  ep02.mp3
+```
+
+Because files are taken in sorted filename order, `ep01` is where a recurring
+voice gets enrolled and `ep02` is where it has to be recognized — the direction
+you want for this test. Re-running is free: already-processed files are skipped
+unless you pass `--force`, so you can add `ep03` later and only pay for it.
+
 **The test that matters**: does the host resolve to the same name in both episodes, at `matched` confidence? Then:
 
 ```bash
