@@ -5,6 +5,21 @@ The unit tests prove the *mechanics* work (enroll in file 1, recognize in file 2
 > Note: this needs the real embedding model, so run it on your own machine:
 > `pip install -e ".[ecapa]"` (first run downloads ~80 MB from Hugging Face).
 
+## Step 0 — No material yet? Use the bundled starter set
+
+If you don't have suitable recordings on hand, the repo ships a script that
+builds a ready-to-calibrate `voices/` folder from public-domain LibriVox
+audiobooks — three verified solo narrators (Elizabeth Klett, Moira Fogarty,
+Stewart Wills), three one-minute clips each:
+
+```bash
+python scripts/setup_voices.py     # downloads ~70 MB once, caches locally
+speakerdex calibrate voices/
+```
+
+Read speech is cleaner than conversation, so treat the resulting thresholds
+as a best case; recalibrate on your real material (below) when you have it.
+
 ## Step 1 — Calibrate on voices you know
 
 Pick 3–6 people you have multiple recordings of (podcast hosts are perfect: grab 3+ episodes). Cut a clean solo clip per person per episode — 30–60 seconds where only they speak:
