@@ -11,6 +11,10 @@ this measures how the embedding backend actually behaves on *your* audio:
 the distribution of same-speaker vs different-speaker cosine similarities,
 recommended match/review thresholds, and leave-one-out identification
 accuracy at those thresholds.
+
+Subdirectories starting with "_" or "." are not speakers and are skipped, so
+scratch folders can live alongside the voices (scripts/setup_voices.py caches
+its MP3 downloads in voices/_downloads/).
 """
 
 from __future__ import annotations
@@ -25,6 +29,11 @@ from .embeddings import EmbeddingBackend, combine
 from .types import Segment
 
 AUDIO_EXTS = {".wav", ".flac", ".mp3", ".ogg", ".m4a", ".opus"}
+
+
+def is_speaker_dir(path: Path) -> bool:
+    """Speaker directories are visible directories; "_"/"." prefixes are scratch."""
+    return path.is_dir() and not path.name.startswith(("_", "."))
 
 
 def embed_file(
@@ -127,7 +136,7 @@ def calibrate(
     n_files = 0
     skipped: list[str] = []
 
-    for speaker_dir in sorted(p for p in voices_dir.iterdir() if p.is_dir()):
+    for speaker_dir in sorted(p for p in voices_dir.iterdir() if is_speaker_dir(p)):
         embeddings = []
         for audio_path in sorted(speaker_dir.iterdir()):
             if audio_path.suffix.lower() not in AUDIO_EXTS:
@@ -146,7 +155,7 @@ def calibrate(
     if len(speakers) < 2:
         raise ValueError(
             f"need at least 2 speaker directories with audio under {voices_dir} "
-            "(layout: voices/<speaker_name>/*.wav)"
+            "(layout: voices/<speaker_name>/*.wav; '_' and '.' prefixed dirs are skipped)"
         )
 
     names = sorted(speakers)

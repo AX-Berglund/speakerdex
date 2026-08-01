@@ -40,6 +40,22 @@ def test_calibrate_separates_and_recommends(voices_dir, backend):
     assert "100%" in text
 
 
+def test_calibrate_skips_scratch_dirs(voices_dir, backend):
+    """A cache folder of mixed-speaker audio must not become a 4th 'speaker'."""
+    cache = voices_dir / "_downloads"
+    cache.mkdir()
+    for name, f0 in VOICES.items():
+        sf.write(cache / f"{name}.wav", build_track([(f0, 3.0)], seed=99), SR)
+    (voices_dir / ".hidden").mkdir()
+    sf.write(voices_dir / ".hidden" / "a.wav", build_track([(220.0, 3.0)]), SR)
+
+    report = calibrate(voices_dir, backend)
+    assert report.n_speakers == 3
+    assert report.n_files == 9
+    assert min(report.same) > max(report.diff)
+    assert report.warnings == []
+
+
 def test_calibrate_needs_two_speakers(tmp_path, backend):
     root = tmp_path / "voices"
     d = root / "only_one"
