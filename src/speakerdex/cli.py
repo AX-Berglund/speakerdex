@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import numpy as np
 import typer
 
 from . import __version__
@@ -128,6 +129,39 @@ def process(
         mapping = {d.cluster: d.identity_name for d in decisions if d.identity_name}
         write_whisperx(diarization, output, mapping)
         typer.echo(f"Relabelled transcript written to {output}")
+
+
+@app.command()
+def calibrate(
+    voices_dir: Path = typer.Argument(
+        ..., exists=True, file_okay=False,
+        help="Directory of known voices: voices/<speaker_name>/*.wav (2+ files per speaker).",
+    ),
+    backend: str = typer.Option("ecapa", "--backend", help="Embedding backend."),
+    json_out: bool = typer.Option(False, "--json", help="Print the report as JSON."),
+) -> None:
+    """Measure similarity distributions on YOUR audio and recommend thresholds."""
+    from .calibrate import calibrate as run_calibration
+
+    report = run_calibration(voices_dir, _backend(backend))
+    if json_out:
+        typer.echo(
+            json.dumps(
+                {
+                    "n_speakers": report.n_speakers,
+                    "n_files": report.n_files,
+                    "match_threshold": report.match_threshold,
+                    "review_threshold": report.review_threshold,
+                    "top1_accuracy": round(report.top1_accuracy, 4),
+                    "same_median": round(float(np.median(report.same)), 4),
+                    "diff_median": round(float(np.median(report.diff)), 4),
+                    "warnings": report.warnings,
+                },
+                indent=2,
+            )
+        )
+    else:
+        typer.echo(report.summary())
 
 
 @app.command("ls")
